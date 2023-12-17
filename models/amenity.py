@@ -1,12 +1,15 @@
-#!/usr/bin/env python3
-"""amenity class inheriting from BaseModel
-"""
+#!/usr/bin/python3
+"""Defines class for amenity"""
+
 
 from models.base_model import BaseModel
 
 
 class Amenity(BaseModel):
-    """class amenity inheriting from baseModel
+    """Amenity class for AirBnB project
+
+    name - empty string
     """
 
     name = ""
+

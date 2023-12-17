@@ -1,261 +1,205 @@
 #!/usr/bin/python3
-"""This module defines the entry point of the command interpreter.
-
-It defines one class, `HBNBCommand()`, which sub-classes the `cmd.Cmd` class.
-It allows us to interactively and non-interactively:
-    - create a data model
-    - manage (create, update, destroy, etc) objects via a console / interpreter
-    - store and persist objects to a file (JSON file)
-"""
-import re
+"""Define console"""
 import cmd
-import json
-from models import storage
+import sys
+import shlex
+from models.engine.file_storage import FileStorage
 from models.base_model import BaseModel
-from models.user import User
-from models.state import State
 from models.city import City
-from models.review import Review
-from models.amenity import Amenity
+from models.state import State
+from models.user import User
 from models.place import Place
-
-current_classes = {'BaseModel': BaseModel, 'User': User,
-                   'Amenity': Amenity, 'City': City, 'State': State,
-                   'Place': Place, 'Review': Review}
+from models.amenity import Amenity
+from models.review import Review
+from models.__init__ import storage
 
 
 class HBNBCommand(cmd.Cmd):
-    """The command interpreter.
-
-    This class represents the command interpreter, and the control center
-    of this project. It defines function handlers for all commands inputted
-    in the console and calls the appropriate storage engine APIs to manipulate
-    application data / models.
-
-    It sub-classes Python's `cmd.Cmd` class which provides a simple framework
-    for writing line-oriented command interpreters.
+    """
+        Starting point of command interpreter
     """
 
-    prompt = "(hbnb) "
-
-    def precmd(self, line):
-        """Defines instructions to execute before <line> is interpreted.
-        """
-        if not line:
-            return '\n'
-
-        pattern = re.compile(r"(\w+)\.(\w+)\((.*)\)")
-        match_list = pattern.findall(line)
-        if not match_list:
-            return super().precmd(line)
-
-        match_tuple = match_list[0]
-        if not match_tuple[2]:
-            if match_tuple[1] == "count":
-                instance_objs = storage.all()
-                print(len([
-                    v for _, v in instance_objs.items()
-                    if type(v).__name__ == match_tuple[0]]))
-                return "\n"
-            return "{} {}".format(match_tuple[1], match_tuple[0])
-        else:
-            args = match_tuple[2].split(", ")
-            if len(args) == 1:
-                return "{} {} {}".format(
-                    match_tuple[1], match_tuple[0],
-                    re.sub("[\"\']", "", match_tuple[2]))
-            else:
-                match_json = re.findall(r"{.*}", match_tuple[2])
-                if (match_json):
-                    return "{} {} {} {}".format(
-                        match_tuple[1], match_tuple[0],
-                        re.sub("[\"\']", "", args[0]),
-                        re.sub("\'", "\"", match_json[0]))
-                return "{} {} {} {} {}".format(
-                    match_tuple[1], match_tuple[0],
-                    re.sub("[\"\']", "", args[0]),
-                    re.sub("[\"\']", "", args[1]), args[2])
-
-    def do_help(self, arg):
-        """To get help on a command, type help <topic>.
-        """
-        return super().do_help(arg)
-
-    def do_EOF(self, line):
-        """Inbuilt EOF command to gracefully catch errors.
-        """
-        print("")
-        return True
-
-    def do_quit(self, arg):
-        """Quit command to exit the program.
-        """
-        return True
+    prompt = ("(hbnb) ")
 
     def emptyline(self):
-        """Override default `empty line + return` behaviour.
-        """
+        """pass and do nothing with input line"""
         pass
 
-    def do_create(self, arg):
-        """Creates a new instance.
-        """
-        args = arg.split()
-        if not validate_classname(args):
-            return
-
-        new_obj = current_classes[args[0]]()
-        new_obj.save()
-        print(new_obj.id)
-
-    def do_show(self, arg):
-        """Prints the string representation of an instance.
-        """
-        args = arg.split()
-        if not validate_classname(args, check_id=True):
-            return
-
-        instance_objs = storage.all()
-        key = "{}.{}".format(args[0], args[1])
-        req_instance = instance_objs.get(key, None)
-        if req_instance is None:
-            print("** no instance found **")
-            return
-        print(req_instance)
-
-    def do_destroy(self, arg):
-        """Deletes an instance based on the class name and id.
-        """
-        args = arg.split()
-        if not validate_classname(args, check_id=True):
-            return
-
-        instance_objs = storage.all()
-        key = "{}.{}".format(args[0], args[1])
-        req_instance = instance_objs.get(key, None)
-        if req_instance is None:
-            print("** no instance found **")
-            return
-
-        del instance_objs[key]
-        storage.save()
-
-    def do_all(self, arg):
-        """Prints string representation of all instances.
-        """
-        args = arg.split()
-        all_objs = storage.all()
-
-        if len(args) < 1:
-            print(["{}".format(str(v)) for _, v in all_objs.items()])
-            return
-        if args[0] not in current_classes.keys():
-            print("** class doesn't exist **")
-            return
-        else:
-            print(["{}".format(str(v))
-                  for _, v in all_objs.items() if type(v).__name__ == args[0]])
-            return
-
-    def do_update(self, arg: str):
-        """Updates an instance based on the class name and id.
-        """
-        args = arg.split(maxsplit=3)
-        if not validate_classname(args, check_id=True):
-            return
-
-        instance_objs = storage.all()
-        key = "{}.{}".format(args[0], args[1])
-        req_instance = instance_objs.get(key, None)
-        if req_instance is None:
-            print("** no instance found **")
-            return
-
-        match_json = re.findall(r"{.*}", arg)
-        if match_json:
-            payload = None
-            try:
-                payload: dict = json.loads(match_json[0])
-            except Exception:
-                print("** invalid syntax")
-                return
-            for k, v in payload.items():
-                setattr(req_instance, k, v)
-            storage.save()
-            return
-        if not validate_attrs(args):
-            return
-        first_attr = re.findall(r"^[\"\'](.*?)[\"\']", args[3])
-        if first_attr:
-            setattr(req_instance, args[2], first_attr[0])
-        else:
-            value_list = args[3].split()
-            setattr(req_instance, args[2], parse_str(value_list[0]))
-        storage.save()
-
-
-def validate_classname(args, check_id=False):
-    """Runs checks on args to validate classname entry.
-    """
-    if len(args) < 1:
-        print("** class name missing **")
-        return False
-    if args[0] not in current_classes.keys():
-        print("** class doesn't exist **")
-        return False
-    if len(args) < 2 and check_id:
-        print("** instance id missing **")
-        return False
-    return True
-
-
-def validate_attrs(args):
-    """Runs checks on args to validate classname attributes and values.
-    """
-    if len(args) < 3:
-        print("** attribute name missing **")
-        return False
-    if len(args) < 4:
-        print("** value missing **")
-        return False
-    return True
-
-
-def is_float(x):
-    """Checks if `x` is float.
-    """
-    try:
-        a = float(x)
-    except (TypeError, ValueError):
-        return False
-    else:
+    def do_quit(self, args):
         return True
 
+    def do_EOF(self, args):
+        return True
 
-def is_int(x):
-    """Checks if `x` is int.
-    """
-    try:
-        a = float(x)
-        b = int(a)
-    except (TypeError, ValueError):
-        return False
-    else:
-        return a == b
+    def default(self, args):
+        """ Default catches all function names not spcifically defined"""
+        functs = {"all": self.do_all,
+                  "update": self.do_update,
+                  "show": self.do_show,
+                  "count": self.do_count,
+                  "destroy": self.do_destroy}
+        args = (args.replace("(", ".").replace(")", ".")
+                    .replace('"', "").replace(",", "").split("."))
 
+        try:
+            commands = args[0] + " " + args[2]
+            func = functs[args[1]]
+            func(commands)
+        except:
+            print("*** Unknown syntax:", args[0])
 
-def parse_str(arg):
-    """Parse `arg` to an `int`, `float` or `string`.
-    """
-    parsed = re.sub("\"", "", arg)
+    def do_create(self, args):
+        """Creates new instance of class BaseModel
+        saves it to json file
+        """
 
-    if is_int(parsed):
-        return int(parsed)
-    elif is_float(parsed):
-        return float(parsed)
-    else:
-        return arg
+        if len(args) == 0:
+            print("** class name missing **")
+            return
 
+        try:
+            args = shlex.split(args)
+            newModel = eval(args[0])()
+            newModel.save()
+            print(newModel.id)
+
+        except:
+            print("** class doesn't exist **")
+
+    def do_show(self, args):
+        """
+           prints string reps of instance based on class name and ID
+        """
+        args = shlex.split(args)
+        if len(args) == 0:
+            print("** class name missing **")
+            return
+        if len(args) == 1:
+            print("** instance id missing **")
+            return
+        storage = FileStorage()
+        storage.reload()
+        object_dict = storage.all()
+
+        try:
+            eval(args[0])
+        except NameError:
+            print("** class doesn't exist **")
+            return
+        keys = args[0] + "." + args[1]
+        keys = args[0] + "." + args[1]
+        try:
+            Value = object_dict[keys]
+            print(Value)
+        except KeyError:
+            print("** no instance found **")
+
+    def do_count(self, args):
+        """
+            counts numb of instances
+        """
+        object_list = []
+        storage = FileStorage()
+        storage.reload()
+        objects = storage.all()
+        try:
+            if len(args) != 0:
+                eval(args)
+        except NameError:
+            print("** class doesn't exist **")
+            return
+        for keys, value in objects.items():
+            if len(args) != 0:
+                if type(value) is eval(args):
+                    object_list.append(value)
+            else:
+                object_list.append(value)
+        print(len(object_list))
+
+    def do_destroy(self, args):
+        """ deletes instance base on class name and id """
+        args = shlex.split(args)
+        if len(args) == 0:
+            print("** class name missing **")
+            return
+        elif len(args) == 1:
+            print("** instance id missing **")
+            return
+        classN = args[0]
+        classI = args[1]
+        storage = FileStorage()
+        storage.reload()
+        object_dict = storage.all()
+        try:
+            eval(classN)
+        except NameError:
+            print("** class doesn't exist **")
+            return
+        keys = classN + "." + classI
+        try:
+            del object_dict[keys]
+        except KeyError:
+            print("** no instance found **")
+        storage.save()
+
+    def do_update(self, args):
+        """ Updates instance on name and ID passed in """
+        storage = FileStorage()
+        storage.reload()
+        args = shlex.split(args)
+        if len(args) == 0:
+            print("** class name missing **")
+            return
+        elif len(args) == 1:
+            print("** instance id missing **")
+            return
+        elif len(args) == 2:
+            print("** attribute name missing **")
+            return
+        elif len(args) == 3:
+            print("** value missing **")
+            return
+        try:
+            eval(args[0])
+        except NameError:
+            print("** class doesn't exist **")
+            return
+        keys = args[0] + "." + args[1]
+        object_dict = storage.all()
+        try:
+            object_value = object_dict[keys]
+        except KeyError:
+            print("** no instance found **")
+            return
+        try:
+            attribute_type = type(getattr(object_value, args[2]))
+            args[3] = attribute_type(args[3])
+        except AttributeError:
+            pass
+        setattr(object_value, args[2], args[3])
+        object_value.save()
+
+    def do_all(self, args):
+        """ Prints all string reps of all instances """
+        object_list = []
+        storage = FileStorage()
+        storage.reload()
+        objects = storage.all()
+        try:
+            if len(args) != 0:
+                eval(args)
+        except NameError:
+            print("** class doesn't exist **")
+            return
+        for keys, value in objects.items():
+            if len(args) != 0:
+                if type(value) is eval(args):
+                    object_list.append(value.__str__())
+            else:
+                object_list.append(value.__str__())
+        print(object_list)
 
 if __name__ == "__main__":
+    """ Start point for loop """
     HBNBCommand().cmdloop()
+
