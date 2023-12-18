@@ -14,3 +14,4 @@ class TestAmenity(TestBaseModel):
         self._class = Amenity()
         self._class2 = Amenity()
         self._name = "Amenity"
+

@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-"""Program for making storage files"""
+"""Module to create a file storage system"""
 
 
 import json

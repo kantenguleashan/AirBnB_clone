@@ -61,3 +61,4 @@ class BaseModel:
 
         ClassName = self.__class__.__name__
         return "[{}] ({}) {}" .format(ClassName, self.id, self.__dict__)
+
